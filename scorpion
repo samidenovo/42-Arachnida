@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+
+# here all imports
+import argparse
+from pathlib import Path
+import sys
+from PIL import ExifTags, Image, UnidentifiedImageError
+
+# Parsing command line arguments
+def parse_args():
+    parser = argparse.ArgumentParser(prog="scorpion")
+    parser.add_argument(
+        "files",
+        nargs="+",
+        help="Files to process",
+    )
+    return parser.parse_args()
+
+# Checker for valid path, ".jpg", ".jpeg", ".png", ".gif", ".bmp" and readable files
+def validate_files(files):
+    allowed_extensions = (".jpg", ".jpeg", ".png", ".gif", ".bmp")
+    valid = []
+
+    for item in files:
+        path = Path(item)
+
+        if not path.exists():
+            print(f"scorpion: error: File not found: {path}", file=sys.stderr)
+            continue
+        if not path.is_file():
+            print(f"scorpion: error: Not a file: {path}", file=sys.stderr)
+            continue
+        if path.suffix.lower() not in allowed_extensions:
+            print(f"scorpion: error: Unsupported file type: {path}", file=sys.stderr)
+            continue
+        try:
+            with path.open("rb"):
+                pass
+        except OSError as error:
+            print(f"scorpion: error: Cannot read {path}: {error}", file=sys.stderr)
+            continue
+        
+        valid.append(path)
+
+    return valid
+
+# Parsing exif
+def read_metadata(path):
+    try:
+        with Image.open(path) as img:
+            img.load()
+            exif_data = img.getexif()
+            exif = {
+                ExifTags.TAGS.get(tag_id, str(tag_id)): value
+                for tag_id, value in exif_data.items()
+            }
+            creation_date = (
+                exif.get("DateTimeOriginal")
+                or exif.get("DateTimeDigitized")
+                or exif.get("DateTime")
+            )
+            return {
+                "format": img.format,
+                "size": img.size,
+                "mode": img.mode,
+                "creation_date": creation_date,
+                "exif": exif,
+            }
+    except (UnidentifiedImageError, OSError) as error:
+        print(f"scorpion: error: Cannot read metadata from {path}: {error}", file=sys.stderr)
+        return None
+
+# Printing the results
+def print_metadata(path, metadata):
+    print(f"\nFile: {path}")
+    print(f"Creation date: {metadata['creation_date'] or 'Not available'}")
+    print("EXIF data:")
+
+    if metadata["exif"]:
+        for tag, value in metadata["exif"].items():
+            print(f"  {tag}: {value}")
+    else:
+        print("  No EXIF data found.")
+
+# Main processing function
+def process_files(valid):
+    for path in valid:
+        metadata = read_metadata(path)
+
+        if metadata is not None:
+            print_metadata(path, metadata)
+
+def main():
+    args = parse_args()
+    valid = validate_files(args.files)
+    process_files(valid)
+
+if __name__ == "__main__":
+    main()

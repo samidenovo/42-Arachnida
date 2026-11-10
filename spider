@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+
+import argparse
+from html.parser import HTMLParser
+from urllib.error import URLError
+from urllib.request import urlopen
+from urllib.parse import urljoin, urlsplit
+from pathlib import Path
+MAX_DOWNLOADS = 5
+
+# PageParser class to extract image and page references from HTML content
+class PageParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.image_refs = []
+        self.page_refs = []
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+
+        if tag == "img":
+            src = attributes.get("src")
+            if src:
+                self.image_refs.append(src)
+
+        elif tag == "a":
+            href = attributes.get("href")
+            if href:
+                self.page_refs.append(href)
+
+# Parsing command-line arguments
+parser = argparse.ArgumentParser(prog="spider")
+
+parser.add_argument("url", help="Website URL to crawl")
+parser.add_argument(
+    "-r",
+    dest="recursive",
+    action="store_true",
+    help="Enable recursive crawling",
+)
+parser.add_argument(
+    "-l",
+    dest="depth",
+    type=int,
+    nargs='?',
+    default=5,
+    const=5,
+    #metavar="N",
+    help="Maximum depth for recursive crawling (default: 5)",
+)
+parser.add_argument(
+    "-p",
+    dest="path",
+    nargs='?',
+    default="./data/",
+    const="./data/",
+    #metavar="PATH",
+    help="Directory to save crawled data (default: ./data/)",
+)
+
+args = parser.parse_args()
+if args.depth < 0:
+    parser.error("Depth must be 0 or greater")
+try:
+    start_parts = urlsplit(args.url)
+except ValueError as error:
+    parser.error(f"Invalid URL: {error}")
+
+if start_parts.scheme not in ("http", "https") or not start_parts.hostname:
+    parser.error("URL must include http:// or https:// and a hostname")
+
+# Create output directory if it doesn't exist
+output_dir = Path(args.path)
+
+try:
+    output_dir.mkdir(parents=True, exist_ok=True)
+except OSError as error:
+    parser.error(f"Could not create output directory: {error}")
+
+# Set of allowed image file extensions
+allowed_extensions = (".jpg", ".jpeg", ".png", ".gif", ".bmp")
+start_url = start_parts._replace(fragment="").geturl()
+start_host = start_parts.hostname.lower()
+
+# Visit pages and download images
+pages_to_visit = [(start_url, 0)]
+visited_pages = {start_url}
+next_page = 0
+image_index = 0
+
+while next_page < len(pages_to_visit):
+    page_url, depth = pages_to_visit[next_page]
+    next_page += 1
+
+    #print(f"Visiting depth {depth}: {page_url}")
+
+    try:
+        with urlopen(page_url, timeout=40) as response:
+            page_url = response.geturl()
+            if depth == 0:
+                start_host = urlsplit(page_url).hostname
+                visited_pages.add(page_url)
+            charset = response.headers.get_content_charset() or "utf-8"
+            page_html = response.read().decode(charset, errors="replace")
+    except (URLError, TimeoutError, ValueError) as error:
+        print(f"Could not fetch page {page_url}: {error}")
+        continue
+
+    html_parser = PageParser()
+    html_parser.feed(page_html)
+
+    for image_ref in html_parser.image_refs:
+        image_url = urljoin(page_url, image_ref)
+        image_path = urlsplit(image_url).path.lower()
+
+        if not image_path.endswith(allowed_extensions):
+            continue
+
+        image_index += 1
+        extension = Path(urlsplit(image_url).path).suffix
+        output_file = output_dir / f"data_{image_index}{extension}"
+
+        try:
+            with urlopen(image_url, timeout=40) as response:
+                image_data = response.read()
+
+            with output_file.open("wb") as image_file:
+                image_file.write(image_data)
+        except (URLError, TimeoutError, OSError) as error:
+            parser.error(f"Could not download {image_url}: {error}")
+
+        #print(f"Downloaded {image_url} -> {output_file}")
+
+    if args.recursive and depth < args.depth:
+        for page_ref in html_parser.page_refs:
+            next_url = urljoin(page_url, page_ref)
+            next_url = urlsplit(next_url)._replace(fragment="").geturl()
+            parts = urlsplit(next_url)
+
+            if parts.scheme not in ("http", "https"):
+                continue
+
+            if parts.hostname != start_host:
+                continue
+
+            if next_url not in visited_pages:
+                visited_pages.add(next_url)
+                pages_to_visit.append((next_url, depth + 1))
