@@ -6,7 +6,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 from urllib.parse import urljoin, urlsplit
 from pathlib import Path
-MAX_DOWNLOADS = 5
+MAX_DOWNLOADS = None
 
 # PageParser class to extract image and page references from HTML content
 class PageParser(HTMLParser):
