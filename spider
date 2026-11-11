@@ -45,7 +45,6 @@ parser.add_argument(
     nargs='?',
     default=5,
     const=5,
-    #metavar="N",
     help="Maximum depth for recursive crawling (default: 5)",
 )
 parser.add_argument(
@@ -54,7 +53,6 @@ parser.add_argument(
     nargs='?',
     default="./data/",
     const="./data/",
-    #metavar="PATH",
     help="Directory to save crawled data (default: ./data/)",
 )
 
@@ -127,7 +125,8 @@ while next_page < len(pages_to_visit):
             with output_file.open("wb") as image_file:
                 image_file.write(image_data)
         except (URLError, TimeoutError, OSError) as error:
-            parser.error(f"Could not download {image_url}: {error}")
+            print(f"Could not download {image_url}: {error}")
+            continue
 
         #print(f"Downloaded {image_url} -> {output_file}")
 

@@ -50,6 +50,7 @@ def read_metadata(path):
         with Image.open(path) as img:
             img.load()
             exif_data = img.getexif()
+            gps_data = exif_data.get_ifd(ExifTags.IFD.GPSInfo)
             exif = {
                 ExifTags.TAGS.get(tag_id, str(tag_id)): value
                 for tag_id, value in exif_data.items()
@@ -64,6 +65,7 @@ def read_metadata(path):
                 "size": img.size,
                 "mode": img.mode,
                 "creation_date": creation_date,
+                "gps_data": gps_data,
                 "exif": exif,
             }
     except (UnidentifiedImageError, OSError) as error:
@@ -75,6 +77,9 @@ def print_metadata(path, metadata):
     print(f"\nFile: {path}")
     print(f"Creation date: {metadata['creation_date'] or 'Not available'}")
     print("EXIF data:")
+
+    for tag_id, value in metadata["gps_data"].items():
+        print(ExifTags.GPSTAGS.get(tag_id, tag_id), value)
 
     if metadata["exif"]:
         for tag, value in metadata["exif"].items():
