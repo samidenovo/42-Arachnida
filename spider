@@ -100,7 +100,7 @@ while next_page < len(pages_to_visit):
                 visited_pages.add(page_url)
             charset = response.headers.get_content_charset() or "utf-8"
             page_html = response.read().decode(charset, errors="replace")
-    except (URLError, TimeoutError, ValueError) as error:
+    except Exception as error:
         print(f"Could not fetch page {page_url}: {error}")
         continue
 
@@ -124,7 +124,7 @@ while next_page < len(pages_to_visit):
 
             with output_file.open("wb") as image_file:
                 image_file.write(image_data)
-        except (URLError, TimeoutError, OSError) as error:
+        except Exception as error:
             print(f"Could not download {image_url}: {error}")
             continue
 
